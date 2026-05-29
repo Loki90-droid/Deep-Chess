@@ -10,9 +10,20 @@ using namespace std;
 
 string solve(int n, vector<long long> a) {
     // TODO: Fill this function.
+    vector<long long> dp(n+1,0);
+    for (int i = n-1; i >= 0; i--) {
+        //take1
+        dp[i] = a[i] - dp[i+1];
+        if (i+1 < n) {
+            //take2
+            dp[i] = max(dp[i], a[i] + a[i+1] - dp[i+2]);
+        }
+    }
+    long long diff = dp[0];
+    if (diff > 0) return "Player 1";
+    else if (diff < 0) return "Player 2";
+    else return "Draw";
     // Return one of: "Player 1" or "Player 2" or "Draw"
-
-    return "";
 }
 
 static string trim(const string &s) {
