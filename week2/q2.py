@@ -1,3 +1,4 @@
+import json
 import copy  # use it for deepcopy if needed
 import math
 import logging
@@ -11,6 +12,9 @@ logging.basicConfig(format='%(levelname)s - %(asctime)s - %(message)s', datefmt=
 board_positions_val_dict = {}
 # Global variable to store the visited histories in the process of alpha beta pruning.
 visited_histories_list = []
+ab_cache={}
+strategy_dict_1={}
+strategy_dict_2={}
 
 
 class History:
@@ -160,19 +164,38 @@ class History:
 
     def is_win(self):
         # Feel free to implement this in anyway if needed
-        pass
-
+        if 1 not in self.active_board_stats:
+            return True
+        return False
     def get_valid_actions(self):
         # Feel free to implement this in anyway if needed
-        pass
+        valid_actions = []
+        for i in range(self.num_boards):
+            if self.active_board_stats[i] == 1:
+                for j in range(9):
+                    if self.boards[i][j] == '0':
+                        valid_actions.append(i*9 + j)
+        return valid_actions
 
     def is_terminal_history(self):
         # Feel free to implement this in anyway if needed
-        pass
-
+        if 1 not in self.active_board_stats:
+            return True
+        return False
     def get_value_given_terminal_history(self):
         # Feel free to implement this in anyway if needed
-        pass
+        if self.is_terminal_history():
+            if self.current_player == 1:
+                return 1
+            else:
+                return -1
+    def update_history(self, action):
+        # Feel free to implement this in anyway if needed
+        self.history.append(action)
+        self.boards[math.floor(action / 9)][action % 9] = 'x'
+        self.active_board_stats = self.check_active_boards()
+        self.current_player = self.get_current_player()
+        return self
 
 
 def alpha_beta_pruning(history_obj, alpha, beta, max_player_flag):
@@ -187,14 +210,58 @@ def alpha_beta_pruning(history_obj, alpha, beta, max_player_flag):
     :return: float
     """
     # These two already given lines track the visited histories.
+    global ab_cache
     global visited_histories_list
     visited_histories_list.append(history_obj.history)
+    boards_str = history_obj.get_boards_str()
+    
+    if boards_str in ab_cache:
+
+        return ab_cache[boards_str]
     # TODO implement
-    return -2
+    if history_obj.is_terminal_history():
+        val = history_obj.get_value_given_terminal_history()
+        ab_cache[boards_str] = val
+        return val
+    if max_player_flag:
+        best_val = -math.inf
+        best_action = None
+        for action in history_obj.get_valid_actions():
+            updated_history = copy.deepcopy(history_obj).update_history(action)
+            utility = alpha_beta_pruning(updated_history, alpha, beta, False)
+            
+            if utility > best_val:
+                best_val = utility
+                best_action = action  
+            alpha = max(alpha, utility)
+            if alpha >= beta:
+                break
+        strategy_dict_1[boards_str] = {str(i): 0 for i in range(18)}
+        strategy_dict_1[boards_str][str(best_action)] = 1
+        ab_cache[boards_str] = best_val
+        return best_val
+    else:
+        best_val = math.inf
+        best_action = None
+        for action in history_obj.get_valid_actions():
+            updated_history = copy.deepcopy(history_obj).update_history(action)
+            utility = alpha_beta_pruning(updated_history, alpha, beta, True)
+            
+            if utility < best_val:
+                best_val = utility
+                best_action = action
+            beta = min(beta, utility)   
+            if alpha >= beta:
+                break
+        strategy_dict_2[boards_str] = {str(i): 0 for i in range(18)}
+        strategy_dict_2[boards_str][str(best_action)] = 1
+        ab_cache[boards_str] = best_val
+        return best_val
+
     # TODO implement
 
 
-def maxmin(history_obj, max_player_flag):
+'''def maxmin(history_obj, max_player_flag):
     """
         Calculate the maxmin value given a History object using maxmin rule. Store the value of already visited
         board positions to speed up, avoiding recursive calls for a different history with the same board position.
@@ -206,23 +273,46 @@ def maxmin(history_obj, max_player_flag):
     # self.boards and value represents the maxmin value. Use the get_boards_str function in History class to get
     # the key corresponding to self.boards.
     global board_positions_val_dict
+    boards_str = history_obj.get_boards_str()
+    if boards_str in board_positions_val_dict:
+        return board_positions_val_dict[boards_str]
     # TODO implement
-    return -2
+    if history_obj.is_terminal_history():
+        return history_obj.get_value_given_terminal_history()
+    if max_player_flag:
+        for action in history_obj.get_valid_actions():
+            updated_history = copy.deepcopy(history_obj).update_history(action)
+            utility = maxmin(updated_history, False)
+            if utility > board_positions_val_dict.get(history_obj.get_boards_str(), -math.inf):
+                board_positions_val_dict[history_obj.get_boards_str()] = utility
+        return board_positions_val_dict.get(history_obj.get_boards_str(), -math.inf)
+    else:
+        for action in history_obj.get_valid_actions():
+            updated_history = copy.deepcopy(history_obj).update_history(action)
+            utility = maxmin(updated_history, True)
+            if utility < board_positions_val_dict.get(history_obj.get_boards_str(), math.inf):
+                board_positions_val_dict[history_obj.get_boards_str()] = utility
+        return board_positions_val_dict.get(history_obj.get_boards_str(), math.inf)
     # TODO implement
-
+'''
 
 def solve_alpha_beta_pruning(history_obj, alpha, beta, max_player_flag):
     global visited_histories_list
     val = alpha_beta_pruning(history_obj, alpha, beta, max_player_flag)
-    return val, visited_histories_list
+    with open("./policy_1.json", "w") as f:
+        json.dump(strategy_dict_1, f)
+    with open("./policy_2.json", "w") as f:
+        json.dump(strategy_dict_2, f)
+    return strategy_dict_1, strategy_dict_2
 
 
 if __name__ == "__main__":
     logging.info("start")
     logging.info("alpha beta pruning")
-    value, visited_histories = solve_alpha_beta_pruning(History(history=[], num_boards=2), -math.inf, math.inf, True)
-    logging.info("maxmin value {}".format(value))
-    logging.info("Number of histories visited {}".format(len(visited_histories)))
-    logging.info("maxmin memory")
-    logging.info("maxmin value {}".format(maxmin(History(history=[], num_boards=2), True)))
+    solve_alpha_beta_pruning(History(history=[], num_boards=2), -math.inf, math.inf, True)
+    #value, visited_histories = solve_alpha_beta_pruning(History(history=[], num_boards=3), -math.inf, math.inf, True)
+    #logging.info("maxmin value {}".format(value))
+    #logging.info("Number of histories visited {}".format(len(visited_histories)))
+    #logging.info("maxmin memory")
+    #logging.info("maxmin value {}".format(maxmin(History(history=[], num_boards=3), True)))
     logging.info("end")
